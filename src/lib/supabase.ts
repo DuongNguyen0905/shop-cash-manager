@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-url.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = 'https://oopwxboyryefrvgsmhhw.supabase.co';
+const supabaseAnonKey = 'sb_publishable_YL2T_UxTHFrPiW1D4MTJkQ_PF6L29Wm';
 
-export const isMock = supabaseUrl.includes('placeholder');
+export const isMock = false;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

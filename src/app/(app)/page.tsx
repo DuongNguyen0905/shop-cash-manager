@@ -106,10 +106,10 @@ export default function DashboardPage() {
       if (new Date(c.date) <= selectedDateObj) drawerToSafe += Number(c.cash_reserved);
     });
 
-    let allCash = 0;
+    let allCash = 0; let allBank = 0;
     shifts.forEach(s => {
       if (new Date(s.date) <= selectedDateObj) {
-        allCash += (Number(s.cash_revenue) || 0) - (Number(s.expense) || 0);
+        allCash += (Number(s.cash_revenue) || 0) - (Number(s.expense) || 0); allBank += (Number(s.bank_revenue) || 0);
       }
     });
     const cashOnHand = allCash - drawerToSafe + capitalAdded;
@@ -139,7 +139,7 @@ export default function DashboardPage() {
       });
 
     return {
-      stats: { todayRevenue, cash, bank, totalHours: Math.round(totalHours*10)/10, reserveTotal, reserveAdded, reserveWithdrawn, cashOnHand },
+      stats: { todayRevenue, cash, bank, totalHours: Math.round(totalHours*10)/10, reserveTotal, reserveAdded, reserveWithdrawn, cashOnHand, allBank },
       chartData: weekData,
       notes: dayNotes
     };

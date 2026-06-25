@@ -12,7 +12,7 @@ import { mockDb } from '@/lib/mock-db'
 import { supabase, isMock } from '@/lib/supabase'
 
 type Shift = { cash_revenue: number; expense: number }
-type Closing = { cash_reserved: number }
+type Reserve = { amount: number }
 
 export default function ClosingPage() {
   const [cashTotal, setCashTotal] = useState('')
@@ -20,7 +20,7 @@ export default function ClosingPage() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [shifts, setShifts] = useState<Shift[]>([])
-  const [closings, setClosings] = useState<Closing[]>([])
+  const [reserves, setReserves] = useState<Reserve[]>([])
 
   useEffect(() => { 
     setMounted(true)
@@ -30,16 +30,16 @@ export default function ClosingPage() {
   const fetchData = async () => {
     if (isMock) {
       setShifts(mockDb.shifts)
-      setClosings(mockDb.closings)
+      setReserves(mockDb.reserves)
       return
     }
     try {
       const [shRes, clRes] = await Promise.all([
         supabase.from('shifts').select('cash_revenue, expense'),
-        supabase.from('closings').select('cash_reserved')
+        supabase.from('cash_reserve').select('amount')
       ])
       setShifts(shRes.data || [])
-      setClosings(clRes.data || [])
+      setReserves(clRes.data || [])
     } catch (error) {
       console.error(error)
     }
@@ -52,11 +52,9 @@ export default function ClosingPage() {
       allCash += (Number(s.cash_revenue) || 0) - (Number(s.expense) || 0);
     });
     let drawerToSafe = 0;
-    closings.forEach(c => {
-      drawerToSafe += Number(c.cash_reserved);
-    });
+    reserves.forEach(r => { drawerToSafe += Number(r.amount); });
     return allCash - drawerToSafe;
-  }, [mounted, shifts, closings])
+  }, [mounted, shifts, reserves])
 
   const cTotal = Number(cashTotal) || 0
   const cRes = Number(cashReserved) || 0
@@ -157,7 +155,7 @@ export default function ClosingPage() {
               </div>
 
               <div className="space-y-2 pt-4">
-                <Label className="text-gray-700 font-semibold">Tiền muốn rút về Quỹ Tích Lũy</Label>
+                <Label className="text-gray-700 font-semibold">Tiền rút về két</Label>
                 <CurrencyInput
                   value={cashReserved}
                   onChangeValue={setCashReserved}

@@ -26,6 +26,7 @@ type ReserveRecord = {
 
 export default function CashReservePage() {
   const [reserves, setReserves] = useState<ReserveRecord[]>([])
+  const [shifts, setShifts] = useState<any[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [pinDialogOpen, setPinDialogOpen] = useState(false)
@@ -144,7 +145,7 @@ export default function CashReservePage() {
             <PiggyBank className="w-6 h-6 text-green-600" />
             Quỹ tách riêng
           </h2>
-          <p className="text-gray-500">Lịch sử rút tiền từ tiệm về quỹ cá nhân.</p>
+          <p className="text-gray-500">Dòng tiền mặt và Vốn của quán.</p>
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>

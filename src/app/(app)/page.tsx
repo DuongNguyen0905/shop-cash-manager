@@ -112,7 +112,7 @@ export default function DashboardPage() {
         allCash += (Number(s.cash_revenue) || 0) - (Number(s.expense) || 0); allBank += (Number(s.bank_revenue) || 0);
       }
     });
-    const cashOnHand = allCash - drawerToSafe + capitalAdded;
+    const cashOnHand = allCash - drawerToSafe + capitalAdded - reserveWithdrawn;
 
     // Chart data for the week
     const weekStart = startOfWeek(selectedDateObj, { weekStartsOn: 1 }); // Monday

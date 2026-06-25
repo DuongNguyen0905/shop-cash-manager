@@ -12,7 +12,7 @@ import { mockDb } from '@/lib/mock-db'
 import { supabase, isMock } from '@/lib/supabase'
 
 type Shift = { cash_revenue: number; expense: number }
-type Reserve = { amount: number }
+type Reserve = { amount: number; note: string }
 
 export default function ClosingPage() {
   const [cashTotal, setCashTotal] = useState('')
@@ -36,7 +36,7 @@ export default function ClosingPage() {
     try {
       const [shRes, clRes] = await Promise.all([
         supabase.from('shifts').select('cash_revenue, expense'),
-        supabase.from('cash_reserve').select('amount')
+        supabase.from('cash_reserve').select('amount, note')
       ])
       setShifts(shRes.data || [])
       setReserves(clRes.data || [])

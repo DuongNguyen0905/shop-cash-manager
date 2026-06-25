@@ -57,7 +57,7 @@ class MockDB {
           this.transactions = parsed.transactions || [];
           this.safe_balance = parsed.safe_balance || 0;
 
-          if (this.needsLegacyMigration(parsed)) {
+          if (this.hasLegacyMoneyData(parsed)) {
             this.migrateLegacyMoneyData();
             this.save();
           }
@@ -66,13 +66,12 @@ class MockDB {
     }
   }
 
-  private needsLegacyMigration(parsed: StoredMockDB) {
-    const hasLegacyMoneyData =
+  private hasLegacyMoneyData(parsed: StoredMockDB) {
+    return (
       (parsed.shifts?.length || 0) > 0 ||
       (parsed.reserves?.length || 0) > 0 ||
-      (parsed.closings?.length || 0) > 0;
-
-    return hasLegacyMoneyData && !parsed.migrated_transactions_from_legacy;
+      (parsed.closings?.length || 0) > 0
+    );
   }
 
   private legacyTimestamp(date?: string, createdAt?: string) {

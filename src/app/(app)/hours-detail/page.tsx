@@ -15,7 +15,7 @@ type Shift = {
   start_time: string; end_time: string | null;
   cash_revenue: number; bank_revenue: number;
 }
-type Employee = { id: string; name: string }
+type Employee = { id: string; name: string; hourly_rate: number }
 
 function HoursDetailContent() {
   const searchParams = useSearchParams()
@@ -41,7 +41,7 @@ function HoursDetailContent() {
     try {
       const [shRes, empRes] = await Promise.all([
         supabase.from('shifts').select('*').eq('date', dateParam),
-        supabase.from('employees').select('id, name')
+        supabase.from('employees').select('id, name, hourly_rate')
       ])
       setShiftsForDate(shRes.data || [])
       setEmployees(empRes.data || [])
@@ -58,11 +58,22 @@ function HoursDetailContent() {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
   }
 
-  const getShiftType = (startTime: string) => {
-    const hour = parseInt(startTime.split(':')[0], 10)
-    if (hour < 12) return { name: 'Ca Sáng', icon: <Sun className="w-4 h-4 text-orange-500" /> }
-    if (hour < 18) return { name: 'Ca Chiều', icon: <Sunset className="w-4 h-4 text-orange-600" /> }
-    return { name: 'Ca Tối', icon: <Moon className="w-4 h-4 text-indigo-600" /> }
+  const getTimeValue = (time: string) => {
+    const [hour, minute] = time.split(':').map(Number)
+    return hour + minute / 60
+  }
+
+  const getShiftType = (startTime: string, endTime: string | null) => {
+    const start = getTimeValue(startTime)
+    const end = endTime ? getTimeValue(endTime) : start
+    const adjustedEnd = end < start ? end + 24 : end
+
+    if (start < 12 && adjustedEnd > 18) return { name: 'Ca sáng + chiều + tối', icon: <Moon className="w-4 h-4 text-indigo-600" /> }
+    if (start < 12 && adjustedEnd > 12) return { name: 'Ca sáng + chiều', icon: <Sun className="w-4 h-4 text-orange-500" /> }
+    if (start < 18 && adjustedEnd > 18) return { name: 'Ca chiều + tối', icon: <Sunset className="w-4 h-4 text-orange-600" /> }
+    if (start < 12) return { name: 'Ca sáng', icon: <Sun className="w-4 h-4 text-orange-500" /> }
+    if (start < 18) return { name: 'Ca chiều', icon: <Sunset className="w-4 h-4 text-orange-600" /> }
+    return { name: 'Ca tối', icon: <Moon className="w-4 h-4 text-indigo-600" /> }
   }
 
   const calculateHours = (start: string, end: string | null) => {
@@ -81,6 +92,8 @@ function HoursDetailContent() {
     const emp = employees.find(e => e.id === shift.employee_id)
     const hours = calculateHours(shift.start_time, shift.end_time)
     const rev = (Number(shift.cash_revenue) || 0) + (Number(shift.bank_revenue) || 0)
+    const hourlyRate = Number(emp?.hourly_rate) || 0
+    const salary = hours * hourlyRate
     
     totalHours += hours
     totalRevenue += rev
@@ -89,9 +102,11 @@ function HoursDetailContent() {
       id: shift.id,
       date: shift.date.split('-').reverse().join('/'),
       name: emp ? emp.name : 'Nhân viên đã xóa',
-      type: getShiftType(shift.start_time),
+      type: getShiftType(shift.start_time, shift.end_time),
       time: `${shift.start_time} - ${shift.end_time || '...'}`,
       hours,
+      hourlyRate,
+      salary,
       revenue: rev
     }
   })
@@ -155,15 +170,16 @@ function HoursDetailContent() {
                   <TableHead>Ca làm</TableHead>
                   <TableHead>Thời gian</TableHead>
                   <TableHead className="text-right">Số giờ</TableHead>
+                  <TableHead className="text-right">Tiền công</TableHead>
                   <TableHead className="text-right">Doanh thu tạo ra</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">Đang tải...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">Đang tải...</TableCell></TableRow>
                 ) : shiftDetails.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                       Không có ca làm nào trong ngày này.
                     </TableCell>
                   </TableRow>
@@ -180,6 +196,7 @@ function HoursDetailContent() {
                       </TableCell>
                       <TableCell className="text-gray-600">{item.time}</TableCell>
                       <TableCell className="text-right font-bold text-blue-600">{item.hours}h</TableCell>
+                      <TableCell className="text-right font-medium text-gray-700">{formatCurrency(item.salary)}</TableCell>
                       <TableCell className="text-right font-medium text-green-700">{formatCurrency(item.revenue)}</TableCell>
                     </TableRow>
                   ))

@@ -234,6 +234,18 @@ export default function ShiftsPage() {
     return <span className="text-blue-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4"/> Dư {formatCurrency(diff)}</span>
   }
 
+  const getEmployeeNameById = (id: string) => {
+    return employees.find(e => e.id === id)?.name
+      || mockDb.employees.find(e => e.id === id)?.name
+      || ''
+  }
+
+  const getShiftEmployeeName = (shift: Shift) => {
+    return shift.employee?.name
+      || getEmployeeNameById(shift.employee_id)
+      || 'Không rõ nhân viên'
+  }
+
   // Calculated Expected Cash for Form Preview
   const expectedCashPreview = (Number(openingCash) || 0) + (Number(cashRevenue) || 0) - (Number(expense) || 0)
 
@@ -289,7 +301,9 @@ export default function ShiftsPage() {
                 <div className="space-y-2">
                   <Label>Nhân viên</Label>
                   <Select value={employeeId} onValueChange={(val) => setEmployeeId(val || '')} required>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Chọn nhân viên..." /></SelectTrigger>
+                    <SelectTrigger className="w-full">
+                      {employeeId ? getEmployeeNameById(employeeId) || 'Không rõ nhân viên' : <SelectValue placeholder="Chọn nhân viên..." />}
+                    </SelectTrigger>
                     <SelectContent>
                       {employees.filter(e => !e.is_deleted || e.id === employeeId).map(e => (
                         <SelectItem key={e.id} value={e.id}>
@@ -386,7 +400,7 @@ export default function ShiftsPage() {
                       <TableRow key={shift.id}>
                         <TableCell>{shift.date}</TableCell>
                         <TableCell className="font-medium">
-                          {isMock ? mockDb.employees.find(e => e.id === shift.employee_id)?.name : shift.employee?.name}
+                          {getShiftEmployeeName(shift)}
                         </TableCell>
                         <TableCell>{shift.start_time} - {shift.end_time || '...'}</TableCell>
                         <TableCell className="text-right font-medium text-gray-600">

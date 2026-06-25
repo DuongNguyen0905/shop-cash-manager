@@ -21,6 +21,17 @@ type Transaction = {
   related_type?: 'Shift' | 'Reserve' | 'Closing';
 };
 
+type StoredMockDB = {
+  employees?: Employee[];
+  shifts?: Shift[];
+  reserves?: Reserve[];
+  closings?: Closing[];
+  audits?: ShiftAudit[];
+  transactions?: Transaction[];
+  safe_balance?: number;
+  migrated_transactions_from_legacy?: boolean;
+};
+
 
 class MockDB {
   employees: Employee[] = [];
@@ -37,18 +48,177 @@ class MockDB {
       try {
         const stored = localStorage.getItem('shopCashMockDB');
         if (stored) {
-          const parsed = JSON.parse(stored);
+          const parsed = JSON.parse(stored) as StoredMockDB;
           this.employees = parsed.employees || [];
           this.shifts = parsed.shifts || [];
           this.reserves = parsed.reserves || [];
           this.closings = parsed.closings || [];
           this.audits = parsed.audits || [];
-          // For backward compatibility
           this.transactions = parsed.transactions || [];
           this.safe_balance = parsed.safe_balance || 0;
+
+          if (this.needsLegacyMigration(parsed)) {
+            this.migrateLegacyMoneyData();
+            this.save();
+          }
         }
       } catch (e) {}
     }
+  }
+
+  private needsLegacyMigration(parsed: StoredMockDB) {
+    const hasLegacyMoneyData =
+      (parsed.shifts?.length || 0) > 0 ||
+      (parsed.reserves?.length || 0) > 0 ||
+      (parsed.closings?.length || 0) > 0;
+
+    return hasLegacyMoneyData && !parsed.migrated_transactions_from_legacy;
+  }
+
+  private legacyTimestamp(date?: string, createdAt?: string) {
+    if (createdAt) return createdAt;
+    if (date) return new Date(`${date}T12:00:00`).toISOString();
+    return new Date().toISOString();
+  }
+
+  private makeLegacyTransaction(
+    tx: Omit<Transaction, 'id' | 'timestamp'>,
+    timestamp: string,
+    suffix: string
+  ): Transaction {
+    return {
+      ...tx,
+      id: `legacy-${tx.related_type || 'tx'}-${tx.related_id || suffix}-${tx.type}`,
+      timestamp,
+    };
+  }
+
+  private migrateLegacyMoneyData() {
+    const migrated: Transaction[] = [];
+
+    for (const shift of this.shifts) {
+      const timestamp = this.legacyTimestamp(shift.date, shift.created_at);
+      const cashRevenue = Number(shift.cash_revenue) || 0;
+      const bankRevenue = Number(shift.bank_revenue) || 0;
+      const expense = Number(shift.expense) || 0;
+
+      if (cashRevenue > 0) {
+        migrated.push(this.makeLegacyTransaction({
+          type: 'CASH_SALE',
+          amount: cashRevenue,
+          description: 'Doanh thu tiền mặt từ dữ liệu cũ',
+          destination: 'CASH',
+          related_id: shift.id,
+          related_type: 'Shift',
+        }, timestamp, shift.id));
+      }
+
+      if (bankRevenue > 0) {
+        migrated.push(this.makeLegacyTransaction({
+          type: 'BANK_SALE',
+          amount: bankRevenue,
+          description: 'Doanh thu chuyển khoản từ dữ liệu cũ',
+          destination: 'BANK',
+          related_id: shift.id,
+          related_type: 'Shift',
+        }, timestamp, shift.id));
+      }
+
+      if (expense > 0) {
+        migrated.push(this.makeLegacyTransaction({
+          type: 'EXPENSE',
+          amount: expense,
+          description: 'Chi phí từ dữ liệu cũ',
+          source: 'CASH',
+          related_id: shift.id,
+          related_type: 'Shift',
+        }, timestamp, shift.id));
+      }
+    }
+
+    for (const closing of this.closings) {
+      const amount = Number(closing.cash_reserved) || 0;
+      if (amount <= 0) continue;
+      migrated.push(this.makeLegacyTransaction({
+        type: 'CLOSING_TRANSFER',
+        amount,
+        description: 'Đóng ngày, cất tiền vào két từ dữ liệu cũ',
+        source: 'CASH',
+        destination: 'SAFE',
+        related_id: closing.id,
+        related_type: 'Closing',
+      }, this.legacyTimestamp(closing.date, closing.created_at), closing.id));
+    }
+
+    for (const reserve of this.reserves) {
+      const amount = Number(reserve.amount) || 0;
+      if (amount === 0) continue;
+      const timestamp = this.legacyTimestamp(reserve.date, reserve.created_at);
+      const isDeleted = reserve.is_deleted;
+      const source = reserve.source;
+
+      if (source === 'SAFE' || source === 'CASH') {
+        migrated.push(this.makeLegacyTransaction({
+          type: 'WITHDRAWAL',
+          amount: Math.abs(amount),
+          description: reserve.note || 'Rút tiền từ dữ liệu cũ',
+          source,
+          destination: 'EXTERNAL',
+          related_id: reserve.id,
+          related_type: 'Reserve',
+        }, timestamp, reserve.id));
+        if (isDeleted) {
+          migrated.push(this.makeLegacyTransaction({
+            type: 'REFUND_WITHDRAWAL',
+            amount: Math.abs(amount),
+            description: `Hoàn lại khoản rút từ dữ liệu cũ: ${reserve.note || ''}`,
+            source: 'EXTERNAL',
+            destination: source,
+            related_id: reserve.id,
+            related_type: 'Reserve',
+          }, timestamp, `${reserve.id}-refund`));
+        }
+        continue;
+      }
+
+      if (amount > 0) {
+        migrated.push(this.makeLegacyTransaction({
+          type: 'ADJUSTMENT',
+          amount,
+          description: reserve.note || 'Nạp quỹ từ dữ liệu cũ',
+          source: 'EXTERNAL',
+          destination: 'SAFE',
+          related_id: reserve.id,
+          related_type: 'Reserve',
+        }, timestamp, reserve.id));
+      } else {
+        migrated.push(this.makeLegacyTransaction({
+          type: 'WITHDRAWAL',
+          amount: Math.abs(amount),
+          description: reserve.note || 'Rút quỹ từ dữ liệu cũ',
+          source: 'SAFE',
+          destination: 'EXTERNAL',
+          related_id: reserve.id,
+          related_type: 'Reserve',
+        }, timestamp, reserve.id));
+      }
+    }
+
+    const existingIds = new Set(this.transactions.map(tx => tx.id));
+    const merged = [
+      ...this.transactions,
+      ...migrated.filter(tx => !existingIds.has(tx.id)),
+    ];
+
+    this.transactions = merged.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    this.safe_balance = this.transactions.reduce((balance, tx) => {
+      if (tx.destination === 'SAFE') return balance + tx.amount;
+      if (tx.source === 'SAFE') return balance - tx.amount;
+      return balance;
+    }, 0);
   }
 
   save() {
@@ -61,6 +231,7 @@ class MockDB {
         audits: this.audits,
         transactions: this.transactions,
         safe_balance: this.safe_balance,
+        migrated_transactions_from_legacy: true,
       }));
     }
   }

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -7,67 +7,94 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog'
-import { PiggyBank, Plus, Wallet, Trash2, Ban } from 'lucide-react'
+import { PiggyBank, Plus, TrendingUp, TrendingDown, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
+import { supabase, isMock } from '@/lib/supabase'
 import { mockDb } from '@/lib/mock-db'
 import { CurrencyInput } from '@/components/ui/currency-input'
+import { Trash2 } from 'lucide-react'
 import { PinDialog } from '@/components/PinDialog'
 
-// Reflects the updated Reserve type in mock-db
 type ReserveRecord = {
   id: string
-  created_at: string
+  date: string
   amount: number
   note: string
-  source?: 'CASH' | 'SAFE'
-  is_deleted?: boolean
 }
+
+
 
 export default function CashReservePage() {
   const [reserves, setReserves] = useState<ReserveRecord[]>([])
-  const [currentCash, setCurrentCash] = useState(0)
-  const [safeBalance, setSafeBalance] = useState(0)
-  
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [pinDialogOpen, setPinDialogOpen] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  // Form state
+  // Form
+  const [transactionType, setTransactionType] = useState<'add' | 'withdraw'>('add')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
-  const [source, setSource] = useState<'CASH' | 'SAFE'>('CASH')
 
-  const fetchData = () => {
+  const fetchReserves = async () => {
     setLoading(true)
-    setCurrentCash(mockDb.getCurrentCash())
-    setSafeBalance(mockDb.safe_balance)
-    setReserves([...mockDb.reserves].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const numAmount = Number(amount) || 0
-    if (numAmount <= 0) {
-      toast.error("Vui lòng nhập số tiền hợp lệ.")
+    if (isMock) {
+      setReserves([...mockDb.reserves].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+      setLoading(false)
       return
     }
 
     try {
-      mockDb.addWithdrawal(numAmount, note, source)
-      toast.success('Rút tiền thành công')
+      const { data, error } = await supabase.from('cash_reserve').select('*').order('date', { ascending: false })
+      if (error) throw error
+      setReserves(data || [])
+    } catch (error: any) {
+      toast.error('Lỗi tải dữ liệu: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchReserves()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!amount) return
+
+    if (isMock) {
+      const finalAmount = transactionType === 'withdraw' ? -Math.abs(Number(amount)) : Math.abs(Number(amount))
+      mockDb.addReserve({
+        date: new Date().toISOString().split('T')[0],
+        amount: finalAmount,
+        note
+      })
+      toast.success('Thêm giao dịch thành công')
       setIsOpen(false)
       setAmount('')
       setNote('')
-      setSource('CASH')
-      fetchData()
+      fetchReserves()
+      return
+    }
+
+    try {
+      const finalAmount = transactionType === 'withdraw' ? -Math.abs(Number(amount)) : Math.abs(Number(amount))
+      const { error } = await supabase.from('cash_reserve').insert([
+        {
+          date: new Date().toISOString().split('T')[0],
+          amount: finalAmount,
+          note
+        }
+      ])
+      if (error) throw error
+      toast.success('Thêm giao dịch thành công')
+      setIsOpen(false)
+      setAmount('')
+      setNote('')
+      fetchReserves()
     } catch (error: any) {
-      toast.error(error.message)
+      toast.error('Lỗi: ' + error.message)
     }
   }
 
@@ -76,77 +103,87 @@ export default function CashReservePage() {
     setPinDialogOpen(true)
   }
 
-  const executeDelete = (id: string) => {
-    try {
-      mockDb.deleteReserve(id)
-      toast.success('Đã huỷ khoản rút. Tiền đã được hoàn lại.')
-      fetchData()
-    } catch (error: any) {
-      toast.error('Lỗi khi huỷ: ' + error.message)
-    }
+  const executeDelete = async (id: string) => {
+      if (isMock) {
+        mockDb.reserves = mockDb.reserves.filter(r => r.id !== id);
+        mockDb.save();
+        toast.success('Đã xóa giao dịch');
+        fetchReserves();
+        return;
+      }
+      try {
+        const { error } = await supabase.from('cash_reserve').delete().eq('id', id);
+        if (error) throw error;
+        toast.success('Đã xóa giao dịch');
+        fetchReserves();
+      } catch (error: any) {
+        toast.error('Lỗi khi xóa: ' + error.message);
+      }
   }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
   }
 
-  const sourceBalance = source === 'CASH' ? currentCash : safeBalance;
+  const totalIn = reserves.filter(r => r.amount > 0).reduce((sum, record) => sum + record.amount, 0)
+  const totalOut = reserves.filter(r => r.amount < 0).reduce((sum, record) => sum + Math.abs(record.amount), 0)
+  const totalReserve = reserves.reduce((sum, record) => sum + record.amount, 0)
 
   return (
     <div className="space-y-6">
       <PinDialog 
         isOpen={pinDialogOpen} 
         onOpenChange={setPinDialogOpen}
-        title="Xác nhận huỷ"
-        description="Nhập mã PIN để xác nhận huỷ khoản rút tiền này. Tiền sẽ được hoàn lại vào quỹ."
+        title="Xác nhận xóa"
+        description="Nhập mã PIN để xóa giao dịch quỹ này."
         onConfirm={() => pendingDeleteId && executeDelete(pendingDeleteId)}
       />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-            <PiggyBank className="w-6 h-6 text-orange-600" />
-            Rút tiền & Quản lý Quỹ
+            <PiggyBank className="w-6 h-6 text-green-600" />
+            Quỹ tách riêng
           </h2>
-          <p className="text-gray-500">Rút tiền từ các quỹ của cửa hàng và xem lại lịch sử.</p>
+          <p className="text-gray-500">Lịch sử rút tiền từ tiệm về quỹ cá nhân.</p>
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger render={
-            <Button className="bg-orange-600 hover:bg-orange-700">
+            <Button className="bg-green-600 hover:bg-green-700">
               <Plus className="w-4 h-4 mr-2" />
-              Tạo khoản rút
+              Thêm giao dịch
             </Button>
           } />
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Tạo khoản rút tiền</DialogTitle>
+              <DialogTitle>Giao dịch quỹ</DialogTitle>
+              <DialogDescription>Chọn loại giao dịch và nhập số tiền</DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label>Nguồn tiền</Label>
-                <div className="grid grid-cols-2 gap-4 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setSource('CASH')}
-                    className={`flex flex-col items-center justify-between rounded-md border-2 bg-popover p-4 hover:bg-accent hover:text-accent-foreground ${source === 'CASH' ? 'border-primary' : 'border-muted'}`}
-                  >
-                    <Wallet className="mb-3 h-6 w-6" />
-                    Tiền mặt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSource('SAFE')}
-                    className={`flex flex-col items-center justify-between rounded-md border-2 bg-popover p-4 hover:bg-accent hover:text-accent-foreground ${source === 'SAFE' ? 'border-primary' : 'border-muted'}`}
-                  >
-                    <PiggyBank className="mb-3 h-6 w-6" />
-                    Két
-                  </button>
-                </div>
-                 <p className="text-sm text-gray-500 mt-2">Có sẵn: {formatCurrency(sourceBalance)}</p>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              
+              <div className="grid grid-cols-2 gap-4">
+                <Button 
+                  type="button" 
+                  variant={transactionType === 'withdraw' ? 'default' : 'outline'} 
+                  className={transactionType === 'withdraw' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                  onClick={() => setTransactionType('withdraw')}
+                >
+                  <ArrowUpFromLine className="w-4 h-4 mr-2" />
+                  Rút ra (Mang về)
+                </Button>
+                <Button 
+                  type="button" 
+                  variant={transactionType === 'add' ? 'default' : 'outline'} 
+                  className={transactionType === 'add' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  onClick={() => setTransactionType('add')}
+                >
+                  <ArrowDownToLine className="w-4 h-4 mr-2" />
+                  Nộp vào (Thêm vốn)
+                </Button>
               </div>
 
               <div className="space-y-2">
-                <Label>Số tiền cần rút (VNĐ)</Label>
+                <Label>Số tiền (VNĐ)</Label>
                 <CurrencyInput
                   value={amount}
                   onChangeValue={setAmount}
@@ -162,78 +199,93 @@ export default function CashReservePage() {
                   placeholder="Nhập ghi chú..."
                 />
               </div>
-              <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700">
-                Xác nhận rút
+              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
+                Lưu giao dịch
               </Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="shadow-sm">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="bg-green-600 text-white border-0 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-blue-600" />
-              Tiền mặt hiện có
+            <CardTitle className="text-sm font-medium text-green-100 flex items-center gap-2">
+              <PiggyBank className="w-4 h-4" />
+              Tổng quỹ hiện tại
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-700">{formatCurrency(currentCash)}</div>
+            <div className="text-3xl font-bold">{formatCurrency(totalReserve)}</div>
           </CardContent>
         </Card>
+
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-              <PiggyBank className="w-4 h-4 text-purple-600" />
-              Tiền trong két
+              <TrendingUp className="w-4 h-4 text-green-600" />
+              Tổng nộp vào
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-purple-700">{formatCurrency(safeBalance)}</div>
+            <div className="text-2xl font-bold text-gray-900">{formatCurrency(totalIn)}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+              <TrendingDown className="w-4 h-4 text-orange-500" />
+              Tổng rút ra
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900">{formatCurrency(totalOut)}</div>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-lg">Lịch sử rút tiền</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-lg">Lịch sử giao dịch</CardTitle>
+        </CardHeader>
         <CardContent className="p-0 sm:p-6 sm:pt-0">
-          {loading ? <p className="text-center py-4">Đang tải...</p> : (
+          {loading ? (
+            <div className="text-center py-4 text-gray-500">Đang tải...</div>
+          ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Thời gian</TableHead>
-                    <TableHead>Nguồn</TableHead>
+                    <TableHead>Ngày</TableHead>
+                    <TableHead>Loại</TableHead>
                     <TableHead className="text-right">Số tiền</TableHead>
                     <TableHead>Ghi chú</TableHead>
-                    <TableHead className="w-[50px]">Trạng thái</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reserves.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8">Chưa có khoản rút nào</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8">Chưa có giao dịch</TableCell></TableRow>
                   ) : (
                     reserves.map(record => (
-                      <TableRow key={record.id} className={record.is_deleted ? 'bg-gray-100 text-gray-400' : ''}>
-                        <TableCell>{new Date(record.created_at).toLocaleString('vi-VN')}</TableCell>
+                      <TableRow key={record.id}>
+                        <TableCell>{record.date}</TableCell>
                         <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            record.source === 'CASH' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                          }`}>
-                            {record.source === 'CASH' ? 'Tiền mặt' : 'Két'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(record.amount)}</TableCell>
-                        <TableCell className="text-gray-500">{record.note}</TableCell>
-                        <TableCell className="text-center">
-                          {record.is_deleted ? (
-                             <span className="text-gray-400 flex items-center justify-center gap-1 text-sm"><Ban className="w-3 h-3"/> Đã huỷ</span>
+                          {record.amount >= 0 ? (
+                            <span className="text-green-600 flex items-center gap-1 text-sm"><TrendingUp className="w-3 h-3"/> Nộp vào</span>
                           ) : (
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <span className="text-red-600 flex items-center gap-1 text-sm"><TrendingDown className="w-3 h-3"/> Rút ra</span>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {record.amount > 0 ? '+' : ''}{formatCurrency(record.amount)}
+                        </TableCell>
+                        <TableCell className="text-gray-500">{record.note}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))

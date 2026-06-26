@@ -71,7 +71,7 @@ export default function ClosingPage() {
       drawerToSafe += Number(c.cash_reserved);
     });
 
-    return capitalAdded + drawerToSafe - reserveWithdrawn;
+    return drawerToSafe - reserveWithdrawn; // Capital is physically in the Drawer
   }, [mounted, reserves, closings])
 
   const cTotal = Number(cashTotal) || 0

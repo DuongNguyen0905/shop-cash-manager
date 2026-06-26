@@ -104,7 +104,7 @@ export default function DashboardPage() {
       if (new Date(c.date) <= selectedDateObj) drawerToSafe += Number(c.cash_reserved);
     });
 
-    const safeCash = capitalAdded + drawerToSafe - reserveWithdrawn;
+    const safeCash = drawerToSafe - reserveWithdrawn; // Capital is physically in the Drawer
 
     // Drawer Cash calculation (Tiền trong khay)
     let drawerCash = 0;

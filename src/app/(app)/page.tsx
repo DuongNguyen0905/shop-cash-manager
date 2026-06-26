@@ -13,7 +13,7 @@ import Link from 'next/link'
 import { requirePin } from '@/lib/auth'
 import { toast } from 'sonner'
 
-type Shift = { id: string; date: string; employee_id: string; start_time: string; end_time: string | null; cash_revenue: number; bank_revenue: number; expense: number; note: string }
+type Shift = { id: string; date: string; employee_id: string; start_time: string; end_time: string | null; cash_revenue: number; bank_revenue: number; expense: number; note: string; created_at?: string; actual_cash?: number | null; opening_cash?: number }
 type Employee = { id: string; name: string }
 type Reserve = { date: string; amount: number; note?: string }
 type Closing = { date: string; cash_reserved: number }

@@ -41,14 +41,20 @@ export default function CashReservePage() {
     setLoading(true)
     if (isMock) {
       setReserves([...mockDb.reserves].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+      setShifts(mockDb.shifts)
       setLoading(false)
       return
     }
 
     try {
-      const { data, error } = await supabase.from('cash_reserve').select('*').order('date', { ascending: false })
-      if (error) throw error
-      setReserves(data || [])
+      const [resRes, shRes] = await Promise.all([
+        supabase.from('cash_reserve').select('*').order('date', { ascending: false }),
+        supabase.from('shifts').select('cash_revenue, bank_revenue, expense')
+      ]);
+      if (resRes.error) throw resRes.error
+      if (shRes.error) throw shRes.error
+      setReserves(resRes.data || [])
+      setShifts(shRes.data || [])
     } catch (error: any) {
       toast.error('Lỗi tải dữ liệu: ' + error.message)
     } finally {
@@ -128,7 +134,11 @@ export default function CashReservePage() {
 
   const totalIn = reserves.filter(r => r.amount > 0).reduce((sum, record) => sum + record.amount, 0)
   const totalOut = reserves.filter(r => r.amount < 0).reduce((sum, record) => sum + Math.abs(record.amount), 0)
-  const totalReserve = reserves.reduce((sum, record) => sum + record.amount, 0)
+  let netShiftRevenue = 0;
+  shifts.forEach(s => {
+    netShiftRevenue += (Number(s.cash_revenue) || 0) + (Number(s.bank_revenue) || 0) - (Number(s.expense) || 0);
+  });
+  const totalReserve = netShiftRevenue + totalIn - totalOut;
 
   return (
     <div className="space-y-6">
@@ -218,6 +228,7 @@ export default function CashReservePage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{formatCurrency(totalReserve)}</div>
+            <p className="text-xs text-green-200 mt-1">Bao gồm toàn bộ thu/chi TM & CK từ trước đến nay</p>
           </CardContent>
         </Card>
 

@@ -13,6 +13,7 @@ import { supabase, isMock } from '@/lib/supabase'
 
 type Shift = { cash_revenue: number; expense: number }
 type Reserve = { amount: number; note: string }
+type Closing = { cash_reserved: number }
 
 export default function ClosingPage() {
   const [cashTotal, setCashTotal] = useState('')
@@ -21,6 +22,7 @@ export default function ClosingPage() {
   const [mounted, setMounted] = useState(false)
   const [shifts, setShifts] = useState<Shift[]>([])
   const [reserves, setReserves] = useState<Reserve[]>([])
+  const [closings, setClosings] = useState<Closing[]>([])
 
   useEffect(() => { 
     setMounted(true)
@@ -31,30 +33,46 @@ export default function ClosingPage() {
     if (isMock) {
       setShifts(mockDb.shifts)
       setReserves(mockDb.reserves)
+      setClosings(mockDb.closings)
       return
     }
     try {
-      const [shRes, clRes] = await Promise.all([
+      const [shRes, rsvRes, clsRes] = await Promise.all([
         supabase.from('shifts').select('cash_revenue, expense'),
-        supabase.from('cash_reserve').select('amount, note')
+        supabase.from('cash_reserve').select('amount, note'),
+        supabase.from('closings').select('cash_reserved')
       ])
       setShifts(shRes.data || [])
-      setReserves(clRes.data || [])
+      setReserves(rsvRes.data || [])
+      setClosings(clsRes.data || [])
     } catch (error) {
       console.error(error)
     }
   }
 
-  const expectedCash = useMemo(() => {
+  const safeCash = useMemo(() => {
     if (!mounted) return 0;
-    let allCash = 0;
-    shifts.forEach(s => {
-      allCash += (Number(s.cash_revenue) || 0) - (Number(s.expense) || 0);
+    let reserveAdded = 0;
+    let reserveWithdrawn = 0;
+    let capitalAdded = 0;
+    
+    reserves.forEach(r => {
+      const amt = Number(r.amount);
+      if (amt > 0) {
+        reserveAdded += amt;
+        if (r.note !== 'Rút cuối ngày') capitalAdded += amt;
+      } else {
+        reserveWithdrawn += Math.abs(amt);
+      }
     });
+
     let drawerToSafe = 0;
-    reserves.forEach(r => { drawerToSafe += Number(r.amount); });
-    return allCash - drawerToSafe;
-  }, [mounted, shifts, reserves])
+    closings.forEach(c => {
+      drawerToSafe += Number(c.cash_reserved);
+    });
+
+    return capitalAdded + drawerToSafe - reserveWithdrawn;
+  }, [mounted, reserves, closings])
 
   const cTotal = Number(cashTotal) || 0
   const cRes = Number(cashReserved) || 0
@@ -142,7 +160,7 @@ export default function ClosingPage() {
                 <div className="flex justify-between items-end">
                   <Label className="text-gray-700 font-semibold text-lg">Tổng tiền mặt đếm được</Label>
                   <span className="text-sm text-gray-500">
-                    Phần mềm tính: <strong className="text-gray-700">{formatCurrency(expectedCash)}</strong>
+                    Két sắt hiện tại: <strong className="text-gray-700">{formatCurrency(safeCash)}</strong>
                   </span>
                 </div>
                 <CurrencyInput

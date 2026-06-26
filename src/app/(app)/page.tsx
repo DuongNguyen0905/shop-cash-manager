@@ -82,8 +82,7 @@ export default function DashboardPage() {
       }
     });
 
-    // Calculate cash on hand and reserved up to selected date
-    let reserveTotal = 0;
+    // Safe Cash calculation (Tiền trong két)
     let reserveAdded = 0;
     let reserveWithdrawn = 0;
     let capitalAdded = 0;
@@ -91,7 +90,6 @@ export default function DashboardPage() {
     reserves.forEach(r => {
       if (new Date(r.date) <= selectedDateObj) {
         const amt = Number(r.amount);
-        reserveTotal += amt;
         if (amt > 0) {
           reserveAdded += amt;
           if (r.note !== 'Rút cuối ngày') capitalAdded += amt;
@@ -106,13 +104,32 @@ export default function DashboardPage() {
       if (new Date(c.date) <= selectedDateObj) drawerToSafe += Number(c.cash_reserved);
     });
 
-    let allCash = 0; let allBank = 0;
+    const safeCash = capitalAdded + drawerToSafe - reserveWithdrawn;
+
+    // Drawer Cash calculation (Tiền trong khay)
+    let drawerCash = 0;
+    // Get the latest shift up to selected date
+    const shiftsUpToDate = shifts.filter(s => new Date(s.date) <= selectedDateObj)
+                                 .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime());
+    
+    if (shiftsUpToDate.length > 0) {
+      const latestShift = shiftsUpToDate[0];
+      if (latestShift.actual_cash !== null && latestShift.actual_cash !== undefined) {
+        drawerCash = Number(latestShift.actual_cash);
+      } else {
+        drawerCash = (Number(latestShift.opening_cash) || 0) + (Number(latestShift.cash_revenue) || 0) - (Number(latestShift.expense) || 0);
+      }
+    }
+
+    let allBank = 0;
     shifts.forEach(s => {
       if (new Date(s.date) <= selectedDateObj) {
-        allCash += (Number(s.cash_revenue) || 0) - (Number(s.expense) || 0); allBank += (Number(s.bank_revenue) || 0);
+        allBank += (Number(s.bank_revenue) || 0);
       }
     });
-    const cashOnHand = allCash + capitalAdded - reserveWithdrawn;
+
+    const cashOnHand = drawerCash + safeCash;
+
 
     // Chart data for the week
     const weekStart = startOfWeek(selectedDateObj, { weekStartsOn: 1 }); // Monday
@@ -139,7 +156,7 @@ export default function DashboardPage() {
       });
 
     return {
-      stats: { todayRevenue, cash, bank, totalHours: Math.round(totalHours*10)/10, reserveTotal, reserveAdded, reserveWithdrawn, cashOnHand, allBank },
+      stats: { todayRevenue, cash, bank, totalHours: Math.round(totalHours*10)/10, reserveTotal: 0, reserveAdded, reserveWithdrawn, cashOnHand, allBank },
       chartData: weekData,
       notes: dayNotes
     };

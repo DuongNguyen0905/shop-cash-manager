@@ -6,7 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Clock, ArrowLeft, Sun, Sunset, Moon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { Input } from '@/components/ui/input'
+import { CalendarIcon } from 'lucide-react'
 import { mockDb } from '@/lib/mock-db'
 import { supabase, isMock } from '@/lib/supabase'
 
@@ -19,6 +21,7 @@ type Employee = { id: string; name: string; hourly_rate: number }
 
 function HoursDetailContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const dateParam = searchParams.get('date') || new Date().toISOString().split('T')[0]
   const [mounted, setMounted] = useState(false)
   const [shiftsForDate, setShiftsForDate] = useState<Shift[]>([])
@@ -122,12 +125,23 @@ function HoursDetailContent() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
         </Link>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-            <Clock className="w-6 h-6 text-blue-600" />
-            Chi tiết giờ làm
-          </h2>
-          <p className="text-gray-500">Thống kê ca làm việc ngày {displayDate}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+              <Clock className="w-6 h-6 text-blue-600" />
+              Chi tiết giờ làm
+            </h2>
+            <p className="text-gray-500">Thống kê ca làm việc ngày {displayDate}</p>
+          </div>
+          <div className="flex items-center gap-2 mt-4 sm:mt-0">
+            <CalendarIcon className="w-5 h-5 text-gray-500" />
+            <Input 
+              type="date" 
+              value={dateParam} 
+              onChange={(e) => router.push(`?date=${e.target.value}`)}
+              className="w-auto"
+            />
+          </div>
         </div>
       </div>
 

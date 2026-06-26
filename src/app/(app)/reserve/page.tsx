@@ -135,10 +135,17 @@ export default function CashReservePage() {
   const totalIn = reserves.filter(r => r.amount > 0).reduce((sum, record) => sum + record.amount, 0)
   const totalOut = reserves.filter(r => r.amount < 0).reduce((sum, record) => sum + Math.abs(record.amount), 0)
   let netShiftRevenue = 0;
+  let totalCashRev = 0;
+  let totalBankRev = 0;
   shifts.forEach(s => {
-    netShiftRevenue += (Number(s.cash_revenue) || 0) + (Number(s.bank_revenue) || 0) - (Number(s.expense) || 0);
+    const cRev = Number(s.cash_revenue) || 0;
+    const bRev = Number(s.bank_revenue) || 0;
+    totalCashRev += cRev;
+    totalBankRev += bRev;
+    netShiftRevenue += cRev + bRev - (Number(s.expense) || 0);
   });
   const totalReserve = netShiftRevenue + totalIn - totalOut;
+  const grossInflow = totalIn + totalCashRev + totalBankRev;
 
   return (
     <div className="space-y-6">
@@ -218,7 +225,24 @@ export default function CashReservePage() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-blue-600 text-white border-0 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-blue-100 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Tổng thu (Gross Inflow)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{formatCurrency(grossInflow)}</div>
+            <div className="mt-2 space-y-1 text-xs text-blue-100">
+              <div className="flex justify-between"><span>Vốn nộp:</span><span>{formatCurrency(totalIn)}</span></div>
+              <div className="flex justify-between"><span>Thu Tiền mặt:</span><span>{formatCurrency(totalCashRev)}</span></div>
+              <div className="flex justify-between"><span>Thu Chuyển khoản:</span><span>{formatCurrency(totalBankRev)}</span></div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="bg-green-600 text-white border-0 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-green-100 flex items-center gap-2">

@@ -9,7 +9,7 @@ import { useReactToPrint } from 'react-to-print'
 import { Input } from '@/components/ui/input'
 import { mockDb } from '@/lib/mock-db'
 import { supabase, isMock } from '@/lib/supabase'
-import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, startOfDay, endOfDay } from 'date-fns'
 
 type Shift = {
   employee_id: string; date: string;
@@ -22,6 +22,8 @@ type Reserve = { date: string; amount: number }
 export default function ReportsPage() {
   const componentRef = useRef<HTMLDivElement>(null)
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [customStart, setCustomStart] = useState(new Date().toISOString().split('T')[0])
+  const [customEnd, setCustomEnd] = useState(new Date().toISOString().split('T')[0])
   const [activeTab, setActiveTab] = useState('weekly')
   const [mounted, setMounted] = useState(false)
   const [shifts, setShifts] = useState<Shift[]>([])
@@ -68,7 +70,8 @@ export default function ReportsPage() {
     if (!mounted) {
       return {
         weekly: { revenueTotal: 0, revenueCash: 0, revenueBank: 0, expense: 0, hoursWorked: 0, salary: 0, reserved: 0 },
-        monthly: { revenueTotal: 0, revenueCash: 0, revenueBank: 0, expense: 0, hoursWorked: 0, salary: 0, reserved: 0 }
+        monthly: { revenueTotal: 0, revenueCash: 0, revenueBank: 0, expense: 0, hoursWorked: 0, salary: 0, reserved: 0 },
+        custom: { revenueTotal: 0, revenueCash: 0, revenueBank: 0, expense: 0, hoursWorked: 0, salary: 0, reserved: 0 }
       }
     }
 
@@ -137,9 +140,10 @@ export default function ReportsPage() {
 
     return {
       weekly: calcStats(wStart, wEnd),
-      monthly: calcStats(mStart, mEnd)
+      monthly: calcStats(mStart, mEnd),
+      custom: calcStats(startOfDay(new Date(customStart)), endOfDay(new Date(customEnd)))
     }
-  }, [selectedDate, mounted, shifts, employees, reserves])
+  }, [selectedDate, customStart, customEnd, mounted, shifts, employees, reserves])
 
   const ReportContent = ({ data, title, period }: { data: any, title: string, period: string }) => (
     <div className="space-y-6" ref={componentRef}>
@@ -232,7 +236,23 @@ export default function ReportsPage() {
         <div className="flex flex-col sm:flex-row items-center gap-2">
           <div className="flex items-center gap-2">
             <CalendarIcon className="w-5 h-5 text-gray-500" />
-            {activeTab === 'monthly' ? (
+            {activeTab === 'custom' ? (
+              <div className="flex items-center gap-2">
+                <Input 
+                  type="date" 
+                  value={customStart} 
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="w-auto"
+                />
+                <span className="text-gray-500">-</span>
+                <Input 
+                  type="date" 
+                  value={customEnd} 
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="w-auto"
+                />
+              </div>
+            ) : activeTab === 'monthly' ? (
               <Input 
                 type="month" 
                 value={selectedDate.substring(0, 7)} 
@@ -258,15 +278,19 @@ export default function ReportsPage() {
       <Card>
         <CardContent className="p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="weekly">Báo cáo Tuần</TabsTrigger>
               <TabsTrigger value="monthly">Báo cáo Tháng</TabsTrigger>
+              <TabsTrigger value="custom">Tùy chọn</TabsTrigger>
             </TabsList>
             <TabsContent value="weekly">
               <ReportContent data={reportData.weekly} title="Báo cáo Doanh thu Tuần" period="Tuần này" />
             </TabsContent>
             <TabsContent value="monthly">
               <ReportContent data={reportData.monthly} title="Báo cáo Doanh thu Tháng" period="Tháng này" />
+            </TabsContent>
+            <TabsContent value="custom">
+              <ReportContent data={reportData.custom} title="Báo cáo Tùy chọn" period={`${customStart.split('-').reverse().join('/')} - ${customEnd.split('-').reverse().join('/')}`} />
             </TabsContent>
           </Tabs>
         </CardContent>

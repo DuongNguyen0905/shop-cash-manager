@@ -95,19 +95,9 @@ export default function ClosingPage() {
         cash_total: cTotal,
         cash_reserved: cRes
       })
-      if (cRes > 0) {
-        mockDb.addReserve({
-          date: new Date().toISOString().split('T')[0],
-          amount: cRes,
-          note: 'Rút cuối ngày'
-        })
-      }
     } else {
       const dateStr = new Date().toISOString().split('T')[0]
       await supabase.from('closings').insert([{ date: dateStr, cash_total: cTotal, cash_reserved: cRes }])
-      if (cRes > 0) {
-        await supabase.from('cash_reserve').insert([{ date: dateStr, amount: cRes, note: 'Rút cuối ngày' }])
-      }
     }
 
     setIsSuccess(true)

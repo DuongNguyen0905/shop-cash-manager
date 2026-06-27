@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 type Shift = { id: string; date: string; employee_id: string; start_time: string; end_time: string | null; cash_revenue: number; bank_revenue: number; expense: number; note: string; created_at?: string; actual_cash?: number | null; opening_cash?: number }
 type Employee = { id: string; name: string }
 type Reserve = { date: string; amount: number; note?: string }
-type Closing = { date: string; cash_reserved: number }
+type Closing = { date: string; cash_reserved: number; created_at?: string }
 
 
 
@@ -119,6 +119,16 @@ export default function DashboardPage() {
       } else {
         drawerCash = (Number(latestShift.opening_cash) || 0) + (Number(latestShift.cash_revenue) || 0) - (Number(latestShift.expense) || 0);
       }
+      
+      // Prevent double counting: Subtract money withdrawn to Safe AFTER this shift was created
+      const latestShiftTime = new Date(latestShift.created_at || latestShift.date).getTime();
+      let recentWithdrawnToSafe = 0;
+      closings.forEach(c => {
+        if (new Date(c.created_at || c.date).getTime() > latestShiftTime) {
+          recentWithdrawnToSafe += Number(c.cash_reserved);
+        }
+      });
+      drawerCash -= recentWithdrawnToSafe;
     }
 
     let allBank = 0;

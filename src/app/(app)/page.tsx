@@ -138,7 +138,7 @@ export default function DashboardPage() {
       }
     });
 
-    const cashOnHand = drawerCash + safeCash;
+    const cashOnHand = drawerCash; // Only show what is physically in the drawer for the next shift
 
 
     // Chart data for the week
